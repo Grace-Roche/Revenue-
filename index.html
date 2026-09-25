@@ -253,7 +253,7 @@ canvas{max-width:100%;display:block}
       <div class="sb-lbl">Reservas</div>
       <button class="nav-item" data-mod="mercado"><span class="ic">📊</span> Análisis de Mercado</button>
       <button class="nav-item" data-mod="pax"><span class="ic">👥</span> Huéspedes por Hostal</button>
-      <button class="nav-item" data-mod="matriz"><span class="ic">📋</span> Matriz de Reservas</button>
+      <button class="nav-item" data-mod="matriz"><span class="ic">📋</span> Matriz de Desempeño</button>
       <div class="sb-lbl">Hostel to Hostel</div>
       <button class="nav-item" data-mod="h2h_global"><span class="ic">🌎</span> H2H Global</button>
       <button class="nav-item" data-mod="h2h_reg"><span class="ic">📍</span> H2H Regional</button>
@@ -676,7 +676,7 @@ let CURRENT='mercado';
 const TITLES={
  mercado:['Análisis de Mercado','Reservas, ingresos y comportamiento de la red'],
  pax:['Huéspedes por Hostal','Personas hospedadas por propiedad'],
- matriz:['Matriz de Reservas','Tabla pivote por dimensión y mes'],
+ matriz:['Matriz de Desempeño','Tabla pivote por dimensión y mes · reservas o ingresos'],
  h2h_global:['H2H Global','Red Hostel-to-Hostel · visión general'],
  h2h_reg:['H2H Regional','Flujos entre hostales por región'],
  h2h_audit:['H2H Auditoría','Detalle reserva por reserva'],
@@ -1355,17 +1355,27 @@ function sortPax(k){_paxSort.dir=(_paxSort.k===k)?-_paxSort.dir:-1;_paxSort.k=k;
 // ---------- MATRIZ DE RESERVAS (pivote) ----------
 let _matDim='nac'; // nac | canal | hostal
 let _matSort='total'; // total | peor | mejor
+let _matMet='res';    // res | ing  (toggle propio de esta hoja)
+function setMatMet(m){_matMet=m;renderCurrent();}
+function matEsIng(){return _matMet==='ing';}
+function matVal(i){if(_matMet!=='ing')return 1;const d=dayToDate(R.ci[i]);const ym=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');return toUSD(R.rt[i],HOSTALES[R.h[i]].pais,ym);}
+function matLocal(){if(_matMet!=='ing'||F.cur!=='local')return null;const p=paisUnicoActivo();if(!p||['Panamá','Costa Rica','Argentina','Estados Unidos','Ecuador'].includes(p))return null;return p;}
+function matK(n){n=Math.round(n);const a=Math.abs(n);const s=n<0?'-':'';if(a>=1e6)return s+(a/1e6).toFixed(a>=1e7?1:2)+'M';if(a>=1000)return s+(a/1000).toFixed(a>=1e4?0:1)+'k';return ''+n;}
+function matFmt(v){if(_matMet!=='ing')return fmt(v);const p=matLocal();return matK(p?usdToLocal(v,p):v);}
+function matUnidad(){const p=matLocal();return p?'moneda local ('+p+')':'US$';}
 function renderMatriz(c){
   {const _tc=document.getElementById('tb-ctx');if(_tc)_tc.textContent='📋 '+periodoLabel()+paisLabel();}
   const dimBtns=[['nac','Nacionalidad'],['canal','Fuente'],['prom','Promoción'],['hostal','Hostal']].map(([k,l])=>`<button class="seg-btn ${k===_matDim?'active':''}" onclick="setMatDim('${k}')">${l}</button>`).join('');
+  const metBtns=[['res','Reservas'],['ing','Ingresos']].map(([k,l])=>`<button class="seg-btn ${k===_matMet?'active':''}" onclick="setMatMet('${k}')">${l}</button>`).join('');
   const sortBtns=[['total','Mayor volumen'],['peor','Dónde perdemos ▼'],['mejor','Dónde crecemos ▲']].map(([k,l])=>`<button class="seg-btn ${k===_matSort?'active':''}" onclick="setMatSort('${k}')">${l}</button>`).join('');
   c.innerHTML=`
     <div class="mat-controls">
+      <div class="mat-ctl-group"><span class="mat-ctl-lbl">Métrica</span><div class="seg">${metBtns}</div>${_matMet==='ing'?`<span style="font-size:10px;color:var(--ink-3)">en ${matUnidad()}</span>`:''}</div>
       <div class="mat-ctl-group"><span class="mat-ctl-lbl">Ver por</span><div class="seg">${dimBtns}</div></div>
       <div class="mat-ctl-group"><span class="mat-ctl-lbl">Ordenar</span><div class="seg">${sortBtns}</div></div>
     </div>
-    <div class="panel"><div class="panel-h"><span class="ic">📋</span> Matriz ${F.anio} vs ${F.anio-1} <span class="sub">filas = dimensión · columnas = meses</span>
-      <button class="expand" onclick="exportDomTable('matWrap','matriz_reservas')">⬇ Excel</button><button class="expand" onclick="expandTable('matTable','Matriz de reservas')">⛶ Ampliar</button></div>
+    <div class="panel"><div class="panel-h"><span class="ic">📋</span> ${_matMet==='ing'?'Ingresos':'Reservas'} ${F.anio} vs ${F.anio-1} <span class="sub">filas = dimensión · columnas = meses${_matMet==='ing'?' · '+matUnidad():''}</span>
+      <button class="expand" onclick="exportDomTable('matWrap','matriz_desempeno')">⬇ Excel</button><button class="expand" onclick="expandTable('matTable','Matriz de desempeño')">⛶ Ampliar</button></div>
       <div class="tbl-wrap" id="matWrap"></div></div>`;
   buildMatriz('matWrap');
 }
@@ -1379,8 +1389,8 @@ function buildMatriz(w){
   const wrap=document.getElementById(w);const arr=matArr(),labels=matLabels();
   const idxCur=idxFiltrados(F.anio),idxPrev=idxFiltrados(F.anio-1);
   const cur=new Map(),prev=new Map();
-  for(const i of idxCur){const k=arr[i];if(!cur.has(k))cur.set(k,new Array(13).fill(0));const row=cur.get(k);const mo=dayToDate(R.ci[i]).getMonth();row[mo]++;row[12]++;}
-  for(const i of idxPrev){const k=arr[i];if(!prev.has(k))prev.set(k,new Array(13).fill(0));const row=prev.get(k);const mo=dayToDate(R.ci[i]).getMonth();row[mo]++;row[12]++;}
+  for(const i of idxCur){const k=arr[i];if(!cur.has(k))cur.set(k,new Array(13).fill(0));const row=cur.get(k);const mo=dayToDate(R.ci[i]).getMonth();const v=matVal(i);row[mo]+=v;row[12]+=v;}
+  for(const i of idxPrev){const k=arr[i];if(!prev.has(k))prev.set(k,new Array(13).fill(0));const row=prev.get(k);const mo=dayToDate(R.ci[i]).getMonth();const v=matVal(i);row[mo]+=v;row[12]+=v;}
   let crossOn=(_matDim==='nac'||_matDim==='canal'||_matDim==='prom');
   let secArr=null,secLabels=null,secName='';
   if(_matDim==='nac'){secArr=R.can;secLabels=CANALES;secName='canal';}
@@ -1399,8 +1409,8 @@ function buildMatriz(w){
     const visKeys=new Set(rows.map(r=>r.key));
     const cc=new Map(),cp=new Map(); // key -> [13] de Map
     const ensure=(store,k)=>{if(!store.has(k)){const a=[];for(let m=0;m<13;m++)a.push(new Map());store.set(k,a);}return store.get(k);};
-    for(const i of idxCur){const k=arr[i];if(!visKeys.has(k))continue;const mo=dayToDate(R.ci[i]).getMonth();const s=secArr[i];const a=ensure(cc,k);a[mo].set(s,(a[mo].get(s)||0)+1);a[12].set(s,(a[12].get(s)||0)+1);}
-    for(const i of idxPrev){const k=arr[i];if(!visKeys.has(k))continue;const mo=dayToDate(R.ci[i]).getMonth();const s=secArr[i];const a=ensure(cp,k);a[mo].set(s,(a[mo].get(s)||0)+1);a[12].set(s,(a[12].get(s)||0)+1);}
+    for(const i of idxCur){const k=arr[i];if(!visKeys.has(k))continue;const mo=dayToDate(R.ci[i]).getMonth();const s=secArr[i];const a=ensure(cc,k);const v=matVal(i);a[mo].set(s,(a[mo].get(s)||0)+v);a[12].set(s,(a[12].get(s)||0)+v);}
+    for(const i of idxPrev){const k=arr[i];if(!visKeys.has(k))continue;const mo=dayToDate(R.ci[i]).getMonth();const s=secArr[i];const a=ensure(cp,k);const v=matVal(i);a[mo].set(s,(a[mo].get(s)||0)+v);a[12].set(s,(a[12].get(s)||0)+v);}
     const badge=(c,p)=>{if(!p)return c?'<span style="color:#16a34a;font-weight:700">nvo</span>':'';const d=(c-p)/p*100;return `<span style="color:${d>=0?'#16a34a':'#dc2626'};font-weight:700">${d>=0?'▲':'▼'}${Math.abs(d).toFixed(0)}%</span>`;};
     const tip=(rowLabel,mesLabel,cm,pm)=>{
       const allK=new Set([...cm.keys(),...pm.keys()]);
@@ -1408,7 +1418,7 @@ function buildMatriz(w){
       if(!items.length)return '';
       const suben=items.filter(x=>x.d>0).sort((a,b)=>b.d-a.d).slice(0,5);
       const bajan=items.filter(x=>x.d<0).sort((a,b)=>a.d-b.d).slice(0,5);
-      const line=(x,pos)=>`<div class="xr"><span class="xl">${x.label}</span><b class="xv">${fmt(x.c)}</b><span class="xy" style="color:${pos?'#22c55e':'#f87171'}">${x.d>0?'+':''}${fmt(x.d)}</span></div>`;
+      const line=(x,pos)=>`<div class="xr"><span class="xl">${x.label}</span><b class="xv">${matFmt(x.c)}</b><span class="xy" style="color:${pos?'#22c55e':'#f87171'}">${x.d>0?'+':''}${matFmt(x.d)}</span></div>`;
       const colUp=suben.length?suben.map(x=>line(x,1)).join(''):'<div class="xr" style="color:#9a9287">—</div>';
       const colDn=bajan.length?bajan.map(x=>line(x,0)).join(''):'<div class="xr" style="color:#9a9287">—</div>';
       return `<div class="xtt">${rowLabel} · ${mesLabel}<span style="float:right;color:#9a9287;font-weight:400">Δ vs ${F.anio-1}</span></div>
@@ -1424,14 +1434,14 @@ function buildMatriz(w){
     });
   }
   const yoy=(c,p)=>{if(!p)return c?'<span style="color:var(--green);font-weight:700;font-size:9px">nuevo</span>':'<span style="color:var(--ink-3)">—</span>';const d=(c-p)/p*100;return `<span style="color:${d>=0?'var(--green)':'var(--red)'};font-weight:700">${d>=0?'▲':'▼'}${Math.abs(d).toFixed(0)}%</span>`;};
-  const cell=(c,p,ri,m)=>{const cross=crossOn&&_matCross[ri+'_'+m];const attrs=cross?` class="r num mat-x" data-tip="${ri}_${m}" style="cursor:help;line-height:1.2"`:` class="r num" style="line-height:1.2"`;if(!_matComp)return `<td${cross?` class="r num mat-x" data-tip="${ri}_${m}" style="cursor:help"`:' class="r num"'}>${c||''}</td>`;const badge=(!c&&!p)?'':`<div style="font-size:8.5px;line-height:1">${yoy(c,p)}</div>`;return `<td${attrs}>${c||'<span style="color:var(--border-2)">0</span>'}${badge}</td>`;};
+  const cell=(c,p,ri,m)=>{const cross=crossOn&&_matCross[ri+'_'+m];const attrs=cross?` class="r num mat-x" data-tip="${ri}_${m}" style="cursor:help;line-height:1.2"`:` class="r num" style="line-height:1.2"`;if(!_matComp)return `<td${cross?` class="r num mat-x" data-tip="${ri}_${m}" style="cursor:help"`:' class="r num"'}>${c?matFmt(c):''}</td>`;const badge=(!c&&!p)?'':`<div style="font-size:8.5px;line-height:1">${yoy(c,p)}</div>`;return `<td${attrs}>${c?matFmt(c):'<span style="color:var(--border-2)">0</span>'}${badge}</td>`;};
   const dimName=_matDim==='nac'?'Nacionalidad':_matDim==='canal'?'Fuente':_matDim==='prom'?'Tipo / Promoción':'Hostal';
-  const totCellF=(v,p,ri)=>{const cross=crossOn&&_matCross[ri+'_12'];return `<td${cross?` class="r num mat-x" data-tip="${ri}_12" style="cursor:help"`:' class="r num"'}><b>${fmt(v)}</b></td>`;};
+  const totCellF=(v,p,ri)=>{const cross=crossOn&&_matCross[ri+'_12'];return `<td${cross?` class="r num mat-x" data-tip="${ri}_12" style="cursor:help"`:' class="r num"'}><b>${matFmt(v)}</b></td>`;};
   wrap.innerHTML=`
    <div style="margin-bottom:10px;display:flex;gap:16px;align-items:center;flex-wrap:wrap"><label style="font-size:12px;color:var(--ink-2);cursor:pointer;user-select:none"><input type="checkbox" ${_matComp?'checked':''} onchange="toggleMatComp()"> Mostrar comparativo mensual vs ${F.anio-1}</label>${crossOn?`<span style="font-size:11px;color:var(--ink-3)">💡 Pasa el cursor sobre cualquier cifra para ver el desglose por ${secName}</span>`:''}</div>
    <table class="dtable" style="font-size:11.5px"><thead><tr><th style="position:sticky;left:0;background:var(--card);z-index:1">${dimName}</th>${MESES.map(m=>`<th class="r">${m}</th>`).join('')}<th class="r">Total</th><th class="r">vs ${F.anio-1}</th></tr></thead><tbody>
    ${rows.map((r,ri)=>`<tr><td style="position:sticky;left:0;background:var(--card)"><b>${r.label}</b></td>${r.meses.map((v,m)=>cell(v,r.pmeses[m],ri,m)).join('')}${totCellF(r.total,r.ptotal,ri)}<td class="r">${yoy(r.total,r.ptotal)}</td></tr>`).join('')}
-   <tr style="border-top:2px solid var(--border-2);font-weight:700"><td style="position:sticky;left:0;background:var(--card)"><b>TOTAL</b></td>${totMes.map((v,m)=>`<td class="r num">${fmt(v)}</td>`).join('')}<td class="r num">${fmt(totAll)}</td><td class="r">${yoy(totAll,totPrev)}</td></tr>
+   <tr style="border-top:2px solid var(--border-2);font-weight:700"><td style="position:sticky;left:0;background:var(--card)"><b>TOTAL</b></td>${totMes.map((v,m)=>`<td class="r num">${matFmt(v)}</td>`).join('')}<td class="r num">${matFmt(totAll)}</td><td class="r">${yoy(totAll,totPrev)}</td></tr>
   </tbody></table>`;
   if(crossOn){
     wrap.querySelectorAll('.mat-x').forEach(td=>{
@@ -2050,9 +2060,10 @@ function drawDow(id){const cv=document.getElementById(id);if(!cv)return;
         var mo = dayToDate(R.ci[i]).getMonth();
         var na = R.nac[i];
         var dest = esActual ? row.nc : row.np;
-        dest[mo].set(na, (dest[mo].get(na) || 0) + 1);
-        dest[12].set(na, (dest[12].get(na) || 0) + 1);
-        if (esActual) { row.meses[mo]++; row.total++; } else { row.pmeses[mo]++; row.ptotal++; }
+        var v = (typeof matVal === 'function') ? matVal(i) : 1;
+        dest[mo].set(na, (dest[mo].get(na) || 0) + v);
+        dest[12].set(na, (dest[12].get(na) || 0) + v);
+        if (esActual) { row.meses[mo] += v; row.total += v; } else { row.pmeses[mo] += v; row.ptotal += v; }
       }
     }
     acum(cur, true); acum(prev, false);
@@ -2073,9 +2084,9 @@ function drawDow(id){const cv=document.getElementById(id);if(!cv)return;
     var suben = items.filter(function (x) { return x.d > 0; }).sort(function (a, b) { return b.d - a.d; }).slice(0, 5);
     var bajan = items.filter(function (x) { return x.d < 0; }).sort(function (a, b) { return a.d - b.d; }).slice(0, 5);
     var line = function (x, pos) {
-      return '<div class="xr"><span class="xl">' + x.label + '</span><b class="xv">' + fmt(x.c) +
+      return '<div class="xr"><span class="xl">' + x.label + '</span><b class="xv">' + MF(x.c) +
         '</b><span class="xy" style="color:' + (pos ? '#22c55e' : '#f87171') + '">' +
-        (x.d > 0 ? '+' : '') + fmt(x.d) + '</span></div>';
+        (x.d > 0 ? '+' : '') + MF(x.d) + '</span></div>';
     };
     var up = suben.length ? suben.map(function (x) { return line(x, 1); }).join('') : '<div class="xr" style="color:#9a9287">—</div>';
     var dn = bajan.length ? bajan.map(function (x) { return line(x, 0); }).join('') : '<div class="xr" style="color:#9a9287">—</div>';
@@ -2092,20 +2103,21 @@ function drawDow(id){const cv=document.getElementById(id);if(!cv)return;
     return '<span style="color:' + (d >= 0 ? 'var(--green)' : 'var(--red)') +
            ';font-weight:700">' + (d >= 0 ? '▲' : '▼') + Math.abs(d).toFixed(0) + '%</span>';
   }
+  function MF(v) { return (typeof matFmt === 'function') ? matFmt(v) : fmt(v); }
   function celdaH(c, p) {
-    if (!_matComp) return '<td class="r num">' + (c || '') + '</td>';
+    if (!_matComp) return '<td class="r num">' + (c ? MF(c) : '') + '</td>';
     var b = (!c && !p) ? '' : '<div style="font-size:8.5px;line-height:1">' + yoyH(c, p) + '</div>';
     return '<td class="r num" style="line-height:1.2">' +
-           (c || '<span style="color:var(--border-2)">0</span>') + b + '</td>';
+           (c ? MF(c) : '<span style="color:var(--border-2)">0</span>') + b + '</td>';
   }
 
   var _tipHijas = {};          // clave -> html del tooltip de nacionalidades
 
   function celdaHTip(c, p, clave) {
     var attrs = ' class="r num mat-xh" data-tiph="' + clave + '" style="cursor:help;line-height:1.2"';
-    if (!_matComp) return '<td' + attrs + '>' + (c || '') + '</td>';
+    if (!_matComp) return '<td' + attrs + '>' + (c ? MF(c) : '') + '</td>';
     var b = (!c && !p) ? '' : '<div style="font-size:8.5px;line-height:1">' + yoyH(c, p) + '</div>';
-    return '<td' + attrs + '>' + (c || '<span style="color:var(--border-2)">0</span>') + b + '</td>';
+    return '<td' + attrs + '>' + (c ? MF(c) : '<span style="color:var(--border-2)">0</span>') + b + '</td>';
   }
 
   function filaHija(r, si) {
@@ -2120,8 +2132,8 @@ function drawDow(id){const cv=document.getElementById(id);if(!cv)return;
     var kt = si + '_' + r.prom + '_12';
     var ht = r.nc ? tipNac(r.label, 'Total ' + F.anio, r.nc[12], r.np[12]) : '';
     if (ht) _tipHijas[kt] = ht;
-    var tot = ht ? '<td class="r num mat-xh" data-tiph="' + kt + '" style="cursor:help"><b>' + fmt(r.total) + '</b></td>'
-                 : '<td class="r num"><b>' + fmt(r.total) + '</b></td>';
+    var tot = ht ? '<td class="r num mat-xh" data-tiph="' + kt + '" style="cursor:help"><b>' + MF(r.total) + '</b></td>'
+                 : '<td class="r num"><b>' + MF(r.total) + '</b></td>';
     return '<tr class="mat-hija" style="background:var(--bg-soft,#faf8f6)">' +
       '<td style="position:sticky;left:0;background:var(--bg-soft,#faf8f6);padding-left:26px;' +
       'color:var(--ink-2);font-size:11px">' + r.label + '</td>' +
