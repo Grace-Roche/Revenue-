@@ -631,6 +631,8 @@ let DATA=null, R=null, HOSTALES=[], CANALES=[], ESTADOS=[], NACS=[], PROMS=[];
 const EPOCH=new Date(2000,0,1);
 const MESES=['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
 function dayToDate(d){return new Date(EPOCH.getTime()+d*86400000);}
+function diaISO(s){var p=String(s).split('-');return Math.round((new Date(+p[0],+p[1]-1,+p[2])-EPOCH)/86400000);}
+
 function fmt(n){return n.toLocaleString('es-CO');}
 function fmtUSD(n){return '$'+Math.round(n).toLocaleString('es-CO');}
 
@@ -847,7 +849,7 @@ function idxFiltrados(anioOverride){
   // rango específico (cruza años) — solo si NO es override de año (para YoY seguimos por año)
   const rango=(!anioOverride && F.desde && F.hasta);
   let dDesde,dHasta;
-  if(rango){dDesde=Math.floor((new Date(F.desde)-EPOCH)/86400000);dHasta=Math.floor((new Date(F.hasta)-EPOCH)/86400000);}
+  if(rango){dDesde=diaISO(F.desde);dHasta=diaISO(F.hasta);}
   const out=[];
   const h=R.h, yr=R.yr, est=R.est, ci=R.ci, can=R.can, nac=R.nac, prom=R.prom, cat=R.cat;
   const fCan=F.cans.size, fNac=F.nacs.size, fProm=F.proms.size, fCat=F.cats.size, fEst=F.estados.size;
@@ -970,7 +972,7 @@ const MESES_F=['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov'
 function blqFiltrados(){
   const D=window.__BLOQUEOS_RECS__;const out=[];
   const rango=(F.desde&&F.hasta);let dD,dH;
-  if(rango){dD=Math.floor((new Date(F.desde)-EPOCH)/86400000);dH=Math.floor((new Date(F.hasta)-EPOCH)/86400000);}
+  if(rango){dD=diaISO(F.desde);dH=diaISO(F.hasta);}
   for(const r of D.recs){
     if(rango){if(r.ci<dD||r.ci>dH)continue;}
     if(F.paises.size&&!paisActivo(r.p))continue;
@@ -1052,7 +1054,7 @@ function ciAnioOK(ci){
 function t0Filtrados(){
   const D=window.__TARIFA0_RECS__;const out=[];
   const rango=(F.desde&&F.hasta);let dD,dH;
-  if(rango){dD=Math.floor((new Date(F.desde)-EPOCH)/86400000);dH=Math.floor((new Date(F.hasta)-EPOCH)/86400000);}
+  if(rango){dD=diaISO(F.desde);dH=diaISO(F.hasta);}
   for(const r of D.recs){
     if(!ciAnioOK(r.ci))continue;
     if(rango){if(r.ci<dD||r.ci>dH)continue;}
@@ -1140,7 +1142,7 @@ const REF_MES='2026-08';
 function h2hRecsFiltrados(){
   const D=window.__H2H_RECS__;const out=[];
   const rango=(F.desde&&F.hasta);let dD,dH;
-  if(rango){dD=Math.floor((new Date(F.desde)-EPOCH)/86400000);dH=Math.floor((new Date(F.hasta)-EPOCH)/86400000);}
+  if(rango){dD=diaISO(F.desde);dH=diaISO(F.hasta);}
   // hostal filtrado: matchear por nombre display contra emisor o receptor
   let propNames=null;
   if(F.props.size){propNames=new Set([...F.props].map(i=>HOSTALES[i].ciudad));}
@@ -1343,7 +1345,7 @@ const EST_EXCL_A=['not_confirmed','cancelled','canceled','no_show','no-show'];
 function auditFiltrado(){
   const D=h2hData();
   const rango=(F.desde&&F.hasta);let dD,dH;
-  if(rango){dD=Math.floor((new Date(F.desde)-EPOCH)/86400000);dH=Math.floor((new Date(F.hasta)-EPOCH)/86400000);}
+  if(rango){dD=diaISO(F.desde);dH=diaISO(F.hasta);}
   let propNames=null;
   if(F.props.size){propNames=new Set([...F.props].map(i=>HOSTALES[i].ciudad));}
   const toN=(s)=>{if(!s)return null;const p=s.split('-');return Math.floor((new Date(+p[0],+p[1]-1,+p[2])-EPOCH)/86400000);};
@@ -1408,7 +1410,7 @@ registerChart('h2h_cumpl',(cid)=>{restoreModalCanvas();drawH2HCumpl(cid,_h2hData
 function upgFiltrados(){
   const D=window.__UPGRADES_RECS__;const recs=D.recs;const out=[];
   const rango=(F.desde&&F.hasta);let dD,dH;
-  if(rango){dD=Math.floor((new Date(F.desde)-EPOCH)/86400000);dH=Math.floor((new Date(F.hasta)-EPOCH)/86400000);}
+  if(rango){dD=diaISO(F.desde);dH=diaISO(F.hasta);}
   for(const r of recs){
     if(!ciAnioOK(r.ci))continue;
     if(rango){if(r.ci<dD||r.ci>dH)continue;}
@@ -1793,7 +1795,7 @@ function drawEst(id){const cv=document.getElementById(id);if(!cv)return;
 function drawDow(id){const cv=document.getElementById(id);if(!cv)return;
   const D=window.__OCC_RECS__;
   const rango=(F.desde&&F.hasta);let dD,dH;
-  if(rango){dD=Math.floor((new Date(F.desde)-EPOCH)/86400000);dH=Math.floor((new Date(F.hasta)-EPOCH)/86400000);}
+  if(rango){dD=diaISO(F.desde);dH=diaISO(F.hasta);}
   const sum=new Array(7).fill(0),cnt=new Array(7).fill(0);
   if(D&&D.recs){
     for(const r of D.recs){
@@ -2539,8 +2541,7 @@ function drawDow(id){const cv=document.getElementById(id);if(!cv)return;
   function acumular() {
     var rango = (F.desde && F.hasta), dD = 0, dH = 0;
     if (rango) {
-      dD = Math.floor((new Date(F.desde) - EPOCH) / 86400000);
-      dH = Math.floor((new Date(F.hasta) - EPOCH) / 86400000);
+      dD = diaISO(F.desde); dH = diaISO(F.hasta);   // ver nota en assemble.py
     }
     var sum = new Array(7).fill(0), cnt = new Array(7).fill(0);
     var recs = D.recs || [];
